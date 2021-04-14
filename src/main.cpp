@@ -5,9 +5,18 @@
 #include "GPIO.hpp"
 #include <array>
 
+#define nonBlockingDelay(x) \
+  TickType_t currentTick = xTaskGetTickCount(); \
+  while(xTaskGetTickCount() - currentTick < x)
+
+#define WAIT 1000
+
 
 static pico_cpp::GPIO_Pin ledPin(25,pico_cpp::PinType::Output);
-void vTaskCode( void * pvParameters )
+TaskHandle_t xTaskSetHighHandle = NULL;
+TaskHandle_t xTaskSetLowHandle = NULL;
+
+void vTaskSetHigh( void * pvParameters )
 {
     /* The parameter value is expected to be 1 as 1 is passed in the
     pvParameters value in the call to xTaskCreate() below. 
@@ -16,30 +25,56 @@ void vTaskCode( void * pvParameters )
     for( ;; )
     {
             ledPin.set_high();
-            vTaskDelay(1000);
-            ledPin.set_low();
-            vTaskDelay(1000);
+            printf("LED ON!\n");
+            
+            nonBlockingDelay(WAIT);
+            vTaskPrioritySet( xTaskSetLowHandle, uxTaskPriorityGet(NULL)+1 );
     }
 }
 
-int main() {
+void vTaskSetLow( void * pvParameters )
+{
+    /* The parameter value is expected to be 1 as 1 is passed in the
+    pvParameters value in the call to xTaskCreate() below. 
+    configASSERT( ( ( uint32_t ) pvParameters ) == 1 );
+    */
+    for( ;; )
+    {  
+            ledPin.set_low();
+            printf("LED OFF!\n");
+            
+            nonBlockingDelay(WAIT);
+            vTaskPrioritySet( xTaskSetLowHandle, uxTaskPriorityGet(NULL)-2 );
+    }
+}
 
+int main() 
+{
+    stdio_init_all();
+    BaseType_t task1, task2;
+    
+    /* Create tasks */
+    task1 = xTaskCreate(
+            vTaskSetHigh,           /* Function that implements the task. */
+            "Turn LED on",          /* Text name for the task. */
+            1024,                   /* Stack size in words, not bytes. */
+            ( void * ) 1,           /* Parameter passed into the task. */
+            3,                      /* Priority at which the task is created. */
+            &xTaskSetHighHandle );  
 
-BaseType_t xReturned;
-TaskHandle_t xHandle = NULL;
-/* Create the task, storing the handle. */
-    xReturned = xTaskCreate(
-                    vTaskCode,       /* Function that implements the task. */
-                    "Blinky task",   /* Text name for the task. */
-                    512,             /* Stack size in words, not bytes. */
-                    ( void * ) 1,    /* Parameter passed into the task. */
-                    tskIDLE_PRIORITY,/* Priority at which the task is created. */
-                    &xHandle );   
+    task2 = xTaskCreate(
+            vTaskSetLow,            /* Function that implements the task. */
+            "Turn LED of",          /* Text name for the task. */
+            1024,                   /* Stack size in words, not bytes. */
+            ( void * ) 1,           /* Parameter passed into the task. */
+            2,                      /* Priority at which the task is created. */
+            &xTaskSetLowHandle ); 
 
     vTaskStartScheduler();
+
     while(1)
     {
-        configASSERT(0);    /* We should never get here */
+        configASSERT(0);            /* We should never get here */
     }
 
 }
